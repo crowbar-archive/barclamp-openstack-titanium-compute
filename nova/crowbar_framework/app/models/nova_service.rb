@@ -25,25 +25,17 @@ class NovaService < ServiceObject
     false
   end
 
-# sak - commneted out as using percona
-=begin
   def proposal_dependencies(role)
     answer = []
-    #answer << { "barclamp" => "database", "inst" => role.default_attributes["nova"]["db"]["database_instance"] }
-    answer << { "barclamp" => "keystone", "inst" => role.default_attributes["nova"]["keystone_instance"] }
-    answer << { "barclamp" => "glance", "inst" => role.default_attributes["nova"]["glance_instance"] }
-    answer << { "barclamp" => "rabbitmq", "inst" => role.default_attributes["nova"]["rabbitmq_instance"] }
+    answer << { "barclamp" => "haproxy", "inst" => role.default_attributes[@bc_name]["haproxy_instance"] }
+    answer << { "barclamp" => "percona", "inst" => role.default_attributes[@bc_name]["percona_instance"] }
+    answer << { "barclamp" => "keystone", "inst" => role.default_attributes[@bc_name]["keystone_instance"] }
+    answer << { "barclamp" => "rabbitmq", "inst" => role.default_attributes[@bc_name]["rabbitmq_instance"] }
+    answer << { "barclamp" => "glance", "inst" => role.default_attributes[@bc_name]["glance_instance"] }
     answer << { "barclamp" => "cinder", "inst" => role.default_attributes[@bc_name]["cinder_instance"] }
-    #if role.default_attributes[@bc_name]["use_gitrepo"]
-    #  answer << { "barclamp" => "git", "inst" => role.default_attributes[@bc_name]["git_instance"] }
-    #end
-
-    if role.default_attributes[@bc_name]["networking_backend"] == "quantum"
-      answer << { "barclamp" => "quantum", "inst" => role.default_attributes[@bc_name]["quantum_instance"] }
-    end
+    answer << { "barclamp" => "quantum", "inst" => role.default_attributes[@bc_name]["quantum_instance"] }
     answer
   end
-=end
 
   #
   # Lots of enhancements here.  Like:
@@ -55,82 +47,42 @@ class NovaService < ServiceObject
     base = super
     @logger.debug("Nova create_proposal: done with base")
 
-    nodes = NodeObject.all
-    nodes.delete_if { |n| n.nil? }
-    nodes.delete_if { |n| n.admin? } if nodes.size > 1
-    head = nodes.shift
-    nodes = [ head ] if nodes.empty?
-    base["deployment"]["nova"]["elements"] = {
-      "nova-multi-controller" => [ head.name ],
-      "nova-multi-compute" => nodes.map { |x| x.name }
-    }
-    # automatically swap to qemu if using VMs for testing (relies on node.virtual to detect VMs)
-    nodes.each do |n|
-      if n.virtual?
-        base["attributes"]["nova"]["libvirt_type"] = "qemu"
-        break
-      end
-    end
-
-# sak - commneted out as using percona
-=begin
-    base["attributes"][@bc_name]["git_instance"] = ""
+    # HAProxy dependency
+    base["attributes"][@bc_name]["haproxy_instance"] = ""
     begin
-      gitService = GitService.new(@logger)
-      gits = gitService.list_active[1]
-      if gits.empty?
+      haproxyService = HaproxyService.new(@logger)
+      haproxys = haproxyService.list_active[1]
+      if haproxys.empty?
         # No actives, look for proposals
-        gits = gitService.proposals[1]
+        haproxys = haproxyService.proposals[1]
       end
-      unless gits.empty?
-        base["attributes"][@bc_name]["git_instance"] = gits[0]
-      end
+      base["attributes"][@bc_name]["haproxy_instance"] = haproxys[0] unless haproxys.empty?
     rescue
-      @logger.info("#{@bc_name} create_proposal: no git found")
+      @logger.info("Nova create_proposal: no haproxy found")
+    end
+    if base["attributes"][@bc_name]["haproxy_instance"] == ""
+      raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "haproxy"))
     end
 
-
-    base["attributes"]["nova"]["db"]["database_instance"] = ""
+    # Percona dependency
+    base["attributes"][@bc_name]["percona_instance"] = ""
     begin
-      databaseService = DatabaseService.new(@logger)
-      dbs = databaseService.list_active[1]
-      if dbs.empty?
+      perconaService = PerconaService.new(@logger)
+      perconas = perconaService.list_active[1]
+      if perconas.empty?
         # No actives, look for proposals
-        dbs = databaseService.proposals[1]
+        perconas = perconaService.proposals[1]
       end
-      if dbs.empty?
-        @logger.info("Nova create_proposal: no database proposal found")
-      else
-        base["attributes"]["nova"]["db"]["database_instance"] = dbs[0]
-      end
+      base["attributes"][@bc_name]["percona_instance"] = perconas[0] unless perconas.empty?
     rescue
-      @logger.info("Nova create_proposal: no database found")
+      @logger.info("Nova create_proposal: no percona found")
+    end
+    if base["attributes"][@bc_name]["percona_instance"] == ""
+      raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "percona"))
     end
 
-    if base["attributes"]["nova"]["db"]["database_instance"] == ""
-      raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "database"))
-    end
-=end
-#end of change
-
-    base["attributes"]["nova"]["rabbitmq_instance"] = ""
-    begin
-      rabbitmqService = RabbitmqService.new(@logger)
-      rabbitmqs = rabbitmqService.list_active[1]
-      if rabbitmqs.empty?
-        # No actives, look for proposals
-        rabbitmqs = rabbitmqService.proposals[1]
-      end
-      base["attributes"]["nova"]["rabbitmq_instance"] = rabbitmqs[0] unless rabbitmqs.empty?
-    rescue
-      @logger.info("Nova create_proposal: no rabbitmq found")
-    end
-
-    if base["attributes"]["nova"]["rabbitmq_instance"] == ""
-      raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "rabbitmq"))
-    end
-
-    base["attributes"]["nova"]["keystone_instance"] = ""
+    # Keystone dependency
+    base["attributes"][@bc_name]["keystone_instance"] = ""
     begin
       keystoneService = KeystoneService.new(@logger)
       keystones = keystoneService.list_active[1]
@@ -138,16 +90,33 @@ class NovaService < ServiceObject
         # No actives, look for proposals
         keystones = keystoneService.proposals[1]
       end
-      base["attributes"]["nova"]["keystone_instance"] = keystones[0] unless keystones.empty?
+      base["attributes"][@bc_name]["keystone_instance"] = keystones[0] unless keystones.empty?
     rescue
       @logger.info("Nova create_proposal: no keystone found")
     end
-
-    if base["attributes"]["nova"]["keystone_instance"] == ""
+    if base["attributes"][@bc_name]["keystone_instance"] == ""
       raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "keystone"))
     end
 
-    base["attributes"]["nova"]["glance_instance"] = ""
+    # RabbitMQ dependency
+    base["attributes"][@bc_name]["rabbitmq_instance"] = ""
+    begin
+      rabbitmqService = RabbitmqService.new(@logger)
+      rabbitmqs = rabbitmqService.list_active[1]
+      if rabbitmqs.empty?
+        # No actives, look for proposals
+        rabbitmqs = rabbitmqService.proposals[1]
+      end
+      base["attributes"][@bc_name]["rabbitmq_instance"] = rabbitmqs[0] unless rabbitmqs.empty?
+    rescue
+      @logger.info("Nova create_proposal: no rabbitmq found")
+    end
+    if base["attributes"][@bc_name]["rabbitmq_instance"] == ""
+      raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "rabbitmq"))
+    end
+
+    # Glance dependency
+    base["attributes"][@bc_name]["glance_instance"] = ""
     begin
       glanceService = GlanceService.new(@logger)
       glances = glanceService.list_active[1]
@@ -155,16 +124,16 @@ class NovaService < ServiceObject
         # No actives, look for proposals
         glances = glanceService.proposals[1]
       end
-      base["attributes"]["nova"]["glance_instance"] = glances[0] unless glances.empty?
+      base["attributes"][@bc_name]["glance_instance"] = glances[0] unless glances.empty?
     rescue
       @logger.info("Nova create_proposal: no glance found")
     end
-
-    if base["attributes"]["nova"]["glance_instance"] == ""
+    if base["attributes"][@bc_name]["glance_instance"] == ""
       raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "glance"))
     end
 
-    base["attributes"]["nova"]["cinder_instance"] = ""
+    # Cinder dependency
+    base["attributes"][@bc_name]["cinder_instance"] = ""
     begin
       cinderService = CinderService.new(@logger)
       cinders = cinderService.list_active[1]
@@ -172,16 +141,16 @@ class NovaService < ServiceObject
         # No actives, look for proposals
         cinders = cinderService.proposals[1]
       end
-      base["attributes"]["nova"]["cinder_instance"] = cinders[0] unless cinders.empty?
+      base["attributes"][@bc_name]["cinder_instance"] = cinders[0] unless cinders.empty?
     rescue
       @logger.info("Nova create_proposal: no cinder found")
     end
-
-    if base["attributes"]["nova"]["cinder_instance"] == ""
+    if base["attributes"][@bc_name]["cinder_instance"] == ""
       raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "cinder"))
     end
 
-    base["attributes"]["nova"]["quantum_instance"] = ""
+    # Quantum dependency
+    base["attributes"][@bc_name]["quantum_instance"] = ""
     begin
       quantumService = QuantumService.new(@logger)
       quantums = quantumService.list_active[1]
@@ -189,13 +158,29 @@ class NovaService < ServiceObject
         # No actives, look for proposals
         quantums = quantumService.proposals[1]
       end
-      base["attributes"]["nova"]["quantum_instance"] = quantums[0] unless quantums.empty?
+      base["attributes"][@bc_name]["quantum_instance"] = quantums[0] unless quantums.empty?
     rescue
       @logger.info("Nova create_proposal: no quantum found")
     end
-
-    if base["attributes"]["nova"]["quantum_instance"] == ""
+    if base["attributes"][@bc_name]["quantum_instance"] == ""
       raise(I18n.t('model.service.dependency_missing', :name => @bc_name, :dependson => "quantum"))
+    end
+
+    nodes = NodeObject.all
+#    nodes.delete_if { |n| n.nil? }
+#    nodes.delete_if { |n| n.admin? } if nodes.size > 1
+#    head = nodes.shift
+#    nodes = [ head ] if nodes.empty?
+#    base["deployment"]["nova"]["elements"] = {
+#      "nova-multi-controller" => [ head.name ],
+#      "nova-multi-compute" => nodes.map { |x| x.name }
+#    }
+    # automatically swap to qemu if using VMs for testing (relies on node.virtual to detect VMs)
+    nodes.each do |n|
+      if n.virtual?
+        base["attributes"]["nova"]["libvirt_type"] = "qemu"
+        break
+      end
     end
 
     # password unique for all nova services

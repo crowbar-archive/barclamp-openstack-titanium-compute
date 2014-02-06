@@ -1,8 +1,10 @@
 {
   "id": "bc-template-nova",
-  "description": "installs and configures the Openstack Nova component. It relies upon the network and glance barclamps for normal operation.",
+  "description": "OpenStack HA - compute services: provision and manage large network of virtual machines",
   "attributes": {
     "nova": {
+      "haproxy_instance": "",
+      "percona_instance": "",
       "rabbitmq_instance": "none",
       "keystone_instance": "none",
       "service_user": "nova",
