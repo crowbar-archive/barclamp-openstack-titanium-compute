@@ -20,6 +20,20 @@ This barclamp is designed to be used in conjunction with the OpenStack High-Avai
 
 This barclamp should be applued to  3 controller nodes.
 
+Compute barclamp is responsible for installing and configuring Openstack nova on the controller and compute nodes. The compute barclamp is a cloud computing fabric controller. Essentially the nova is the primary part of an infrastructure as a service system. Nova is responsible for providing computing resources and the ability to spawn virtual machines. Nova has the below componentry that manage various processes and functionality. Nova-compute service is installed on the compute nodes while the rest of the nova services are installed on the controller nodes. 
+
+nova-api 
+nova-scheduler 
+nova-conductor 
+nova-console 
+nova-consoleauth 
+nova-compute 
+
+InstallationPrerequisite for the nova proposal are to be applied in the following HAProxy, Percona, RabbitMQ, Keystone, Glance, Cinder and Quantum. Nova proposal as usual needs to be created and saved with the correct settings. Hypervisor selection and node allocation for nova deployment must be set. 
+
+Three controller nodes are added to the nova-multi-controller role and as many as compute nodes required can be added to the nova-multi-compute role.
+
+
 
 
 
