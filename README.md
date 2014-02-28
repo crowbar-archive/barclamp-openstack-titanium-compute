@@ -29,7 +29,7 @@ nova-console
 nova-consoleauth 
 nova-compute 
 
-InstallationPrerequisite for the nova proposal are to be applied in the following HAProxy, Percona, RabbitMQ, Keystone, Glance, Cinder and Quantum. Nova proposal as usual needs to be created and saved with the correct settings. Hypervisor selection and node allocation for nova deployment must be set. 
+Prerequisite for the nova proposal are to be applied in the following HAProxy, Percona, RabbitMQ, Keystone, Glance, Cinder and Quantum. Nova proposal as usual needs to be created and saved with the correct settings. Hypervisor selection and node allocation for nova deployment must be set. 
 
 Three controller nodes are added to the nova-multi-controller role and as many as compute nodes required can be added to the nova-multi-compute role.
 
